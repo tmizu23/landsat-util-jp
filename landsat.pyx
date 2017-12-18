@@ -32,7 +32,7 @@ def stretch(np.ndarray[DTYPE16_t, ndim=2] im,int hmin,int hmax,float sigma):
                im2[x,y]=d
    return im2
 
-def stretch2(np.ndarray[DTYPE8_t, ndim=2] im,int hmin,int hmax):
+def stretch7(np.ndarray[DTYPE8_t, ndim=2] im,int hmin,int hmax,float sigma):
    cdef int xmax = im.shape[0]
    cdef int ymax = im.shape[1]
    cdef float diff = 1./(hmax-hmin)
@@ -45,30 +45,10 @@ def stretch2(np.ndarray[DTYPE8_t, ndim=2] im,int hmin,int hmax):
          if im[x,y] == 0: #nodata
             im2[x,y] = 0
          else:
-            d = (int)(((diff*(im[x,y]-hmin))**1.0)*255)
-            if d<=3: #near black
-               im2[x,y]=3 #if 0 then no data, so change to 3
-            else:
-               im2[x,y]=d
-   return im2
-
-def stretch7(np.ndarray[DTYPE8_t, ndim=2] im,int hmin,int hmax):
-   cdef int xmax = im.shape[0]
-   cdef int ymax = im.shape[1]
-   cdef float diff = 1./(hmax-hmin)
-   cdef np.ndarray[DTYPE8_t, ndim=2] im2 = np.zeros([xmax, ymax], dtype=DTYPE8)
-   cdef int x, y, d
-   # stretch and logistics and bright
-   # http://earthobservatory.nasa.gov/blogs/elegantfigures/2013/10/22/how-to-make-a-true-color-landsat-8-image/
-   for x in range(xmax):
-      for y in range(ymax):
-         if im[x,y] == 0: #nodata
-            im2[x,y] = 0
-         else:
-            d = (int)(((diff*(im[x,y]-hmin))**0.7)*255)
-            #d = (int)(((2.0/(1+exp(-6*(diff*(im[x,y]-hmin))/255.0))-1)**0.4)*255)
-            if d<=15: #near black
-               im2[x,y]=10 #the value 10 is important. if the value is 1, it  change to 0 when converting to hsv
+            d = (int)(((diff*(im[x,y]-hmin))**0.4)*255)
+            #d = (int)(((2.0/(1+exp(-6*(diff*(im[x,y]-hmin))/255.0))-1)**sigma)*255)
+            if d==0: #near black
+               im2[x,y]=1 #the value 10 is important. if the value is 1, it  change to 0 when converting to hsv
             else:
                im2[x,y]=d
    return im2

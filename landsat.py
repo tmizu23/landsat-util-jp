@@ -109,7 +109,7 @@ def process_landsat(idlist, download, extract, create, warp, thumbnail,dir,ctype
         if not exists(join(dir, id + ctype +".tif")):
           print "skip! not exist:" + join(dir, id + ctype + ".tif")
         else:
-          cmd = "gdalwarp -overwrite --config GDAL_CACHEMAX 2048 -wm 2048 -multi -co TILED=YES -co TFW=YES -t_srs EPSG:3857 %s %s" % (
+          cmd = "gdalwarp -overwrite --config GDAL_CACHEMAX 2048 -wm 2048 -multi -co TFW=YES -t_srs EPSG:3857 %s %s" % (
               join(dir, id + ctype+ ".tif"), join(dir, id + ctype + "_w.tif"))
           print cmd
           subprocess.call(cmd, shell=True)

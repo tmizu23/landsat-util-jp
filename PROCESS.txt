@@ -1,19 +1,101 @@
+#1. 期間のサムネイル取得＆html作成
+### 2015春夏
+python landsat.py -g 2015-4-1 2015-8-11
+
+#2. htmlからダウンロードリスト作成
+
+#3. リストのファイルをダウンロード＆画像作成
+python landsat.py --dir=/Volumes/Untitled/landsat/download --list=L8_2015-4-1_2015-8-11.txt -dxcwt --overwrite
+
+#4. 地域ごとに合成
+##フットプリント（実際の領域）のシェープ作成(最初の一回だけ)
+QGISにサムネイルを読み込み
+QGIS image boundary pluginを実行
+3857に投影変換-->footprint3857.shp
+フットプリントからカットラインを調整して作成
+python cutline.py ../../Desktop/thumbnail/footprint3857.shp ../../Desktop/thumbnail/cutline
+ファイル名変更
+for f in *; do mv $f `echo $f |sed 's/LC8\(.*\)2015.*.tif/\1/g'`; done
+#for f in *; do mv $f ${f/2015/}; done
+
+##  地域ごと
+###透過カット＆マージ
+合成地域のrow,pathを指定してループ
+#北海道
+array=(
+108028
+108029
+108030
+108031
+107028
+107029
+107030
+107031
+106028
+106029
+107030
+107031
+106029
+106030
+106031
+105029
+104028
+104029
+)
+for f in ${array[@]}; do cp LC8$f*_w.tif ~/Desktop/hokkaido/; done
+
+for f in ${array[@]}; do gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -overwrite -of VRT -cutline cutline -cl $f -cblend 500 -dstalpha LC8$f*_w.tif $f.vrt; done
+gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi *.vrt merge.tif
+
+#for f in LC810703*.tif; do gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -overwrite -of VRT -cutline cutline -cl $f -cblend 500 -dstalpha $f $f.vrt; done
+#gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi LC*.vrt merge.tif
+
+#5. 県単位（販売単位）で切り抜き
+
+#2次メッシュで切り抜く、4バンドから3バンドに戻す
+#gdalwarp -tr 15 15 --config GDAL_CACHEMAX 2048 -wm 1024 -multi -dstnodata 0 -of VRT -crop_to_cutline -cutline 2jimesh/2ji_mesh.shp merge.tif miyagi.vrt
+#gdal_translate -b 1 -b 2 -b 3 miyagi.vrt miyagi.tif
+
+gdalwarp  -dstnodata 0 -of VRT -tr 15 15 -crop_to_cutline -cutline zoom8.shp -csql 'select * from zoom8 where area_no=11' merge.tif hokkaido1.vrt
+gdal_translate --config GDAL_CACHEMAX 2048 -co COMPRESS=JPEG -b 1 -b 2 -b 3 hokkaido1.vrt hokkaido1.tif
+
+#6. dem合成
+##標高タイルのダウンロード(目録使用)　一度だけ
+###gtiffの範囲の陰影起伏（レベル14）を作成
+python demtile.py --from_gtiff=miyagi.tif --txtdir=
+
+(ここは、プログラム作成)
+##2次メッシュの範囲に変更。解像度も変更。投影法も変更
+
+
+gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -dstnodata 0 -t_srs epsg:32654 -tr 15 15 -r bilinear -crop_to_cutline -cutline 2jimesh/2ji_mesh.shp out.tif hillshade.tif
+##2次メッシュ内のhillshadeタイル（レベル14）をくっつける
+python mergedem.py miyagi.tif hillshade.tif tmp3.tif
+
+###Photoshopのソフトライトで調整
+listgeo -tfw hillshade.tif
+mv hillshade.tfw tmp3.tfw
+gdal_translate -a_nodata 0 -a_srs epsg:32654 tmp3.tif miyagi_dem.tif
+
+#7. タイル化
+python gdal2tiles_parallel.py  -r average -z 5-14 -s epsg:900913 LC81070332014151LGN00org.tif landsat
+
+#合成(optipng化)
+demtile.py dem_landsat
+#サイズ確認
+du -sh dem_landsat
+#optipng化
+find ./test -name "*.png" -exec optipng {} \;
+
+
+
+
 #cython コンパイル
 python setup.py build_ext --inplace
 
-#マージテスト
-python hist.py ../LC81100362014252LGN00/LC81100362014252LGN00_B4.TIF ../LC81100362014252LGN00/LC81100362014252LGN00_B3.TIF ../LC81100362014252LGN00/LC81100362014252LGN00_B2.TIF ../LC81100362014252LGN00/LC81100362014252LGN00_B8.TIF
-convert tiles/13/7164/3230.png dem/13/7164/3230.png -compose soft-light -composite soft.png
-convert tiles/13/7164/3230.png soft.png -compose soft-light -composite multy.png
-convert multy.png soft.png -compose soft-light -composite multy.png
-
-convert tiles/13/7165/3230.png dem/13/7165/3230.png -compose soft-light -composite soft.png
-convert tiles/13/7165/3230.png soft.png -compose soft-light -composite multy.png
-convert multy.png soft.png -compose soft-light -composite multy.png
 
 
 #ランドサット
-
 landsat -s #検索
 landsat -ld list.txt #ダウンロード
 landsat -lx list.txt #解凍
@@ -21,14 +103,6 @@ landsat -lc list.txt #画像作成
 landsat -lw list.txt #投影変換
 landsat -idxcw id #idでダウンロード＆解凍＆画像作成＆投影変換
 
-1.期間指定→期間のHTMLの作成(サムネイルダウンロード)
-2.HTML→選択→リスト作成
-3.リスト→tar.gzダウンロード(id指定ダウンロードもしたい)
-4.展開→tif作成
-5.warp,nearblack,(histmatch)
-6.vrt作成
-7.タイル化
-8.demと合成
 
 demtile -c txtdir demdir
 demtile —r -m pngdir demdir outdir
@@ -40,72 +114,20 @@ demtile -m -zxy 10,101,105 —src landsat_dir —dem dem_dir dst output_dir
 demtile —-reverse -src landsat_dir -dem dem_dir -dst output_dir
 demtile src landsat_dir -dem dem_dir -dst output_dir
 
-#dem
-1.txtダウンロード
-2.タイル画像化
-
-#テスト
-1.id指定ダウンロード
-2.tif作成
-3.タイル化
-4.タイルからdemダウンロード
-5.demと合成
-
-#ダウンロード、展開、合成（landsat8gdal.sh）
-python landsat.py
-
-#vrtの作成。順番？
-gdalbuildvrt --config GDAL_CACHEMAX 2048 merge.vrt *.tif
-
-#landdsatのタイル化
-python gdal2tiles_parallel.py  -r average -z 5-14 -s epsg:900913 LC81070332014151LGN00org.tif landsat
-
-#標高タイルのダウンロード(目録使用)
-
-#合成(optipng化)
-demtile.py dem_landsat
-#サイズ確認
-du -sh dem_landsat
-#optipng化
-find ./test -name "*.png" -exec optipng {} \;
-
-0を最初にマスクして、0を作らない
-photoshopでパノラマ
-microsoftでパノラマ
-opencv stitch
-
-#Landsatのマージ
-#フットプリントのシェープ作成
-QGIS image boundary plugin
-投影変換-->footprint3857.shp
-#カットラインを調整して作成
-python cutline.py ../../Desktop/thumbnail/footprint3857.shp ../../Desktop/thumbnail/cutline
-
-#ファイル名変更
-for f in *; do mv $f ${f/_t/_w}; done
-#透過カット＆マージ
-for f in *.tif; do gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -overwrite -of VRT -cutline cutline -cl $f -cblend 250 -dstalpha $f $f.vrt; done
-gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi LC*.vrt merge.tif
-
-
-### 2015春夏
-python landsat.py -g 2015-4-1 2015-8-11
-python landsat.py --dir=/Volumes/Untitled/landsat/download --list=L8_2015-4-1_2015-8-11.txt -dxcwt --overwrite
-python landsat.py --dir=/Volumes/Untitled/landsat/download --list=L8_2015-4-1_2015-8-11.txt -cwt --overwrite
 
 
 ##ランドサット一枚に陰影起伏を合成
 landsatf=LT51070332009153HAJ00
 landsatres=30
-landsatf=LC81070332014215LGN00
-landsatres=15
+#landsatf=LC81070332014215LGN00
+#landsatres=15
 
 rm cutline.shp
 gdalwarp -overwrite -t_srs epsg:32654 -r bilinear -tr $landsatres $landsatres dem_org.tif dem.tif
 gdaldem hillshade dem.tif hillshade.tif
 gdaltindex cutline.shp hillshade.tif
 
-gdalwarp -overwrite --config GDAL_CACHEMAX 2048 -wm 1024 -multi -cutline cutline.shp -cl cutline -crop_to_cutline "$landsatf"truecolor.tif "$lansatf"truecolor_cut.tif
+gdalwarp -overwrite --config GDAL_CACHEMAX 2048 -wm 1024 -multi -cutline cutline.shp -cl cutline -crop_to_cutline "$landsatf"truecolor.tif "$landsatf"truecolor_cut.tif
 convert "$landsatf"truecolor_cut.tif hillshade.tif -compose soft-light -composite tmp.tif
 convert "$landsatf"truecolor_cut.tif tmp.tif -compose soft-light -composite tmp2.tif
 convert tmp2.tif tmp.tif -compose soft-light -composite tmp3.tif
@@ -120,26 +142,3 @@ convert tmp2.tif tmp.tif -compose soft-light -composite tmp3.tif
 listgeo -tfw hillshade.tif
 mv hillshade.tfw tmp3.tfw
 gdalwarp -r bilinear -s_srs epsg:32654 -t_srs epsg:2452 tmp3.tif landsat2.tif
-
-###  県ごと ####
-cliplineでvrtまで作成
-for f in *; do mv $f ${f/_t/}; done
-#透過カット＆マージ
-for f in LC810703*.tif; do gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -overwrite -of VRT -cutline cutline -cl $f -cblend 500 -dstalpha $f $f.vrt; done
-gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi LC*.vrt merge.tif
-#2次メッシュで切り抜く、3バンドに戻す
-gdalwarp -tr 15 15 --config GDAL_CACHEMAX 2048 -wm 1024 -multi -dstnodata 0 -of VRT -crop_to_cutline -cutline 2jimesh/2ji_mesh.shp merge.tif miyagi.vrt
-gdal_translate -b 1 -b 2 -b 3 miyagi.vrt miyagi.tif
-#2次メッシュ内のhillshadeタイル（レベル14）をくっつける
-#2次メッシュの範囲に変更。解像度も変更。投影法も変更
-gdalwarp --config GDAL_CACHEMAX 2048 -wm 1024 -multi -dstnodata 0 -t_srs epsg:32654 -tr 15 15 -r bilinear -crop_to_cutline -cutline 2jimesh/2ji_mesh.shp out.tif hillshade.tif
-python mergedem.py miyagi.tif hillshade.tif tmp3.tif
-###Photoshopのソフトライトで調整
-listgeo -tfw hillshade.tif
-mv hillshade.tfw tmp3.tfw
-gdal_translate -a_nodata 0 -a_srs epsg:32654 tmp3.tif miyagi_dem.tif
-
-######## 使わない技　############
-#ファイル名変更
-#for f in *; do mv $f ${f/footprint.shp_Image__/}; done
-#rm *.prj

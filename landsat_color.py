@@ -37,12 +37,9 @@ import pylab as plt
 
 def stretch_hist(file,band,cloud,savehist):
    im = cv2.imread(file,-1)
-   #im,T = rof.denoise(im,im)
-   #im = np.ma.masked_equal(im,0)
    hist,bins = np.histogram(im.flatten(),65536,[1,65536]) #0を抜く
    cdf = hist.cumsum()
    cdf = 100.0*cdf/cdf[-1]
-   #hist = cv2.calcHist([im],[0],None,[65536],[0,65536])
    if savehist:
       #fig = plt.figure()
       plt.plot(hist[1:])
@@ -51,13 +48,13 @@ def stretch_hist(file,band,cloud,savehist):
       plt.savefig('hist' + str(band) +'.png', bbox_inches='tight')
       #plt.close(fig)
 
-   #ヒストグラム（0を除く）でピクセル数h を閾値とする最大、最小を見つける。
-   for i in range(1,len(hist)):#enumerate(hist[1:]):
-     if cdf[i]>=0.2: #h>50:#はじめて50ピクセル以上ある色を黒にする。（黒はnodataになるので、実際には少しずらす。青味の調整も）
+   #ヒストグラム（0を除く）で累積のパーセンテージを閾値とする最大、最小を見つける。
+   for i in range(1,len(hist)):
+     if cdf[i]>=0.2: #累積0.2%を黒にする
          hmin = i
          print cdf[i],"% --> ",hmin
          break
-   for i in range(1,len(hist)):
+   for i in range(1,len(hist)): #雲を考慮して上位からの累積を白にする
      if cdf[65535-i] < 100 - 0.04 * cloud:
          hmax=65535-i
          print cdf[65535-i],"% --> ",hmax
@@ -78,95 +75,43 @@ def stretch_hist(file,band,cloud,savehist):
 
    im = landsat.stretch(im,hmin,hmax,sigma)
 
-
-   #im = np.ma.filled(im,255)
-   #cythonじゃない場合
-   #value = 0.5
-   #diff =65535.0/(hmax-hmin)
-   #im = np.uint8((np.power((2.0/(1+np.exp(-6*np.intc(diff*(im-hmin))/65535.0))-1), value))*255)
-
-
    return im
 
-def stretch_hist2(rgb):
-   r = rgb[:,:,2]
-   g = rgb[:,:,1]
-   b = rgb[:,:,0]
-   hist_r,bins = np.histogram(r.flatten(),256,[1,256]) #0を抜く
-   hist_g,bins = np.histogram(g.flatten(),256,[1,256]) #0を抜く
-   hist_b,bins = np.histogram(b.flatten(),256,[1,256]) #0を抜く
-   hist = hist_r + hist_g + hist_b
+def stretch_hist7(file,band,cloud):
+   im = cv2.imread(file,-1)
+   hist,bins = np.histogram(im.flatten(),256,[1,256]) #0を抜く
    cdf = hist.cumsum()
    cdf = 100.0*cdf/cdf[-1]
-   #hist_r = cv2.calcHist([r],[0],None,[256],[0,256])
-   #hist_g = cv2.calcHist([g],[0],None,[256],[0,256])
-   #hist_b = cv2.calcHist([b],[0],None,[256],[0,256])
-   #hist = hist_r + hist_g + hist_b
-   #ヒストグラム（0を除く）でピクセル数h を閾値とする最大、最小を見つける。
-   for i in range(1,len(hist)):#enumerate(hist[1:]):
-      if cdf[i] > 0.5:#h>40000:#はじめて50ピクセル以上ある色を黒にする。（黒はnodataになるので、実際には少しずらす。青味の調整も）
-         hmin = i#-2*band
+
+   #ヒストグラム（0を除く）で累積のパーセンテージを閾値とする最大、最小を見つける。
+   for i in range(1,len(hist)):
+     if cdf[i]>=1.0: #累積0.2%を黒にする
+         hmin = i
+         if band == 3:
+             hmin = hmin + 2
+         if hmin <=0: #hminが0だとnodataと区別がつかないから
+             hmin = 1
          print cdf[i],"% --> ",hmin
          break
-   for i in range(1,len(hist)):#numerate(reversed(hist)):
-      if cdf[255-i]<99:#h>140000:#はじめて10ピクセル以上ある色を白にする
+   for i in range(1,len(hist)): #雲を考慮して上位からの累積を白にする
+     if cdf[255-i] < 100 - 0.1 * cloud:
          hmax=255-i
          print cdf[255-i],"% --> ",hmax
          break
-   r[r<hmin]=hmin
-   r[r>hmax]=hmax
-   g[g<hmin]=hmin
-   g[g>hmax]=hmax
-   b[b<hmin]=hmin
-   b[b>hmax]=hmax
-   r = landsat.stretch2(r,hmin,hmax)
-   g = landsat.stretch2(g,hmin,hmax)
-   b = landsat.stretch2(b,hmin,hmax)
-   rgb = cv2.merge([b,g,r])
-   #im = np.ma.filled(im,255)
-   #cythonじゃない場合
-   #value = 0.5
-   #diff =65535.0/(hmax-hmin)
-   #im = np.uint8((np.power((2.0/(1+np.exp(-6*np.intc(diff*(im-hmin))/65535.0))-1), value))*255)
-   return rgb
 
-def stretch_hist7(file,band):
-   im = cv2.imread(file,-1)
-   #im,T = rof.denoise(im,im)
-   #im = np.ma.masked_equal(im,0)
-   hist = cv2.calcHist([im],[0],None,[256],[0,256])
-   #ヒストグラム（0を除く）でピクセル数h を閾値とする最大、最小を見つける。
-   for i,h in enumerate(hist[20:]):
-      if band == 8 and h > 40000:#はじめて50ピクセル以上ある色を黒にする。（黒はnodataになるので、実際には少しずらす。青味の調整も）
-          hmin = i+19+2
-          hmin = 20
-          print i+19+2,h
-          break
-      elif band != 8 and h > 10000:
-          hmin = i-2*band+19
-          print i-2*band+19,h
-          break
-   for i,h in enumerate(reversed(hist[:-4])):
-      if band ==8 and h > 40000:#はじめて10ピクセル以上ある色を白にする
-        hmax=255-i-4
-        hmax = 150
-        print 255-i-4,h
-        break
-      elif band != 8 and h > 10000:
-        hmax=255-i-4
-        print 255-i-4,h
-        break
-   im[im<hmin]=hmin
+   im[(0<im) & (im<=hmin)]=hmin
    im[im>hmax]=hmax
-   #hmax = 100
-   #hmin = 0
-   im = landsat.stretch7(im,hmin,hmax)
-   #im = np.ma.filled(im,255)
-   #cythonじゃない場合
-   #value = 0.5
-   #diff =65535.0/(hmax-hmin)
-   #im = np.uint8((np.power((2.0/(1+np.exp(-6*np.intc(diff*(im-hmin))/65535.0))-1), value))*255)
-
+   if cloud < 1:
+       sigma = 0.5
+   elif 1<= cloud < 2:
+       sigma = 0.55
+   elif 2<= cloud < 3:
+       sigma = 0.6
+   elif 3<= cloud < 10:
+       sigma = 0.65
+   else:
+       sigma = 0.7
+   im = landsat.stretch7(im,hmin,hmax,cloud)
 
    return im
 
@@ -199,11 +144,11 @@ def process(id,inpdir,outdir,ltype,savehist=False):
         p_no = 8
         ##
         print "stretch"
-        r = stretch_hist7(join(inpdir,id) + "_B" + str(r_no) + ".tif",1)
-        g = stretch_hist7(join(inpdir,id) + "_B" + str(g_no) + ".tif",2)
-        b = stretch_hist7(join(inpdir,id) + "_B" + str(b_no) + ".tif",3)
+        r = stretch_hist7(join(inpdir,id) + "_B" + str(r_no) + ".tif",1,cloud)
+        g = stretch_hist7(join(inpdir,id) + "_B" + str(g_no) + ".tif",2,cloud)
+        b = stretch_hist7(join(inpdir,id) + "_B" + str(b_no) + ".tif",3,cloud)
         if pansharpen:
-            p = stretch_hist7(join(inpdir,id) + "_B" + str(p_no) + ".tif",8)
+            p = stretch_hist7(join(inpdir,id) + "_B" + str(p_no) + ".tif",8,cloud)
 
     ##
     print "merge"
@@ -223,10 +168,6 @@ def process(id,inpdir,outdir,ltype,savehist=False):
         rows = r.shape[0]
         cols = r.shape[1]
 
-    ##
-    #print "stretch2"
-    #rgb = stretch_hist2(rgb)
-
     print "write out"
     #cv2.imwrite("out.tif",rgb)
     gdal.SetConfigOption('GDAL_CACHEMAX','2048')
@@ -236,7 +177,7 @@ def process(id,inpdir,outdir,ltype,savehist=False):
         ds = gdal.Open(join(inpdir,id) + "_B" + str(r_no) + ".tif")
     driver = gdal.GetDriverByName('GTiff')
     # compression option cause a slow reading for GIS
-    dst_ds  = driver.Create(join(outdir,id) + "truecolor.tif", cols, rows, 3, gdal.GDT_Byte,options = [ 'TILED=YES','TFW=YES'])
+    dst_ds  = driver.Create(join(outdir,id) + "truecolor.tif", cols, rows, 3, gdal.GDT_Byte,options = [ 'TFW=YES'])
     dst_ds.SetGeoTransform(ds.GetGeoTransform())
     dst_ds.SetProjection(ds.GetProjection())
     ds = None
